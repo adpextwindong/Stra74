@@ -1,6 +1,7 @@
 \documentclass{article}
 \usepackage[utf8]{inputenc}
 \usepackage{hyperref}
+\usepackage{alltt}
 \usepackage{stmaryrd}
 
 \title{Strachey74 Reading}
@@ -24,7 +25,8 @@ $\epsilon$ Expression\newline
 $\rho$ Environment\newline
 $\sigma$ Store\newline
 $\theta$ Store Transformation from $S \rightarrow S$\newline
-$S$ Domain of Machine States (Stores)
+$S$ Domain of Machine States (Stores)\newline
+$\S$ and $\S|$ Statement brackets (equivalent to Algol 60’s begin and end)
 
 \section{The problem of jumps}
 
@@ -57,8 +59,51 @@ $C\llbracket \gamma_0 ;\gamma_1 \rrbracket (\rho) = (C\llbracket \gamma_1 \rrbra
 
 This simple scheme breaks down if $\gamma_0$ contains a jump to some external label.
 
+\subsection{valof-resultis construction}
+
+Handling an error exit from a function (Algol 60: Type-procedure).
+
+A jump may be called in the middle of evaluating an expression, while there may be several partial results.
+
+We can avoid this unnecessary complication by using the \textbf{valof-resultis} construction.
+
+In this we have an expression of the form \textbf{valof}$\gamma$ and a command of the form \textbf{resultis}$\epsilon$.
+
+NOTE: $\gamma$ is a Command and $\epsilon$ is an expression.
+
+\begin{verbatim}
+data Expr = ... 
+          | Valof Command
+
+data Command = ...
+             | Resultis Expr
+\end{verbatim}
+
+The value of an expression
+
+\begin{alltt}
+\textbf{valof}\(\S\gamma_0\)
+      \(\gamma_1\)
+      ...
+      \textbf{resultis} \(\epsilon'\)
+      ...
+\end{alltt}
+
+is found by obeying the commands $\gamma_0$,$\gamma_1$,... in a sequence until a command \textbf{resultis} $\epsilon'$ is obeyed.
+
+The expression $\epsilon'$ is then evaluated and this value is taken as the value of the whole expression. All programming languages which allow functions to be defined have some construction which is semantically equivalent to this \textbf{resultis} command, but many languages restrict its use so that it gets confused with function definition.
+
+The difficult type of jump is inside the body of a \textbf{valof} block to a label which is outside. The following is a small PL to illustrate the semantics of these jumps.
+
 \section{A small "continuation" language}
-type Identifier = String
+
+\subsection {Syntactic Categories}
+$\xi \in Id$ Usual Identifiers\newline
+$\gamma \in Cmd$ Commands\newline
+$\epsilon \in Exp$ Expressions\newline
+$\phi \in Fn$ Some Primitive Commands\newline
+
+\vspace{1.5cm}
 
 \begin{verbatim}
 \begin{code}
@@ -71,12 +116,18 @@ type Identifier = String
 data Command = Prim
              | Dummy
              | Sequence Command Command
-             | IFE Expr Command Command
-             | While Expr Command
+             | IFE (Expr) Command Command
+             | While (Expr) Command
              | Declarations [(Identifier, Command)]
-             | ResultIs Expr
+             | ResultIs (Expr)
 
-data Expr = Expr
+data Expr = ELabel Identifier
+          | ETrue
+          | EFalse
+          | Cond Expr Expr Expr
+          | ValOf Command
+
 \end{code}
+
 \end{verbatim}
 \end{document}
