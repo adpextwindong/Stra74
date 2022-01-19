@@ -3,6 +3,7 @@
 \usepackage{hyperref}
 \usepackage{alltt}
 \usepackage{stmaryrd}
+\usepackage{amsmath}
 
 \title{Strachey74 Reading}
 \author{George Takumi Crary}
@@ -112,16 +113,17 @@ data Store = Store
 type Cont = Store -> Store
 
 type Identifier = String
+type Label = Identifier
 
 data Command = Prim
              | Dummy
              | Sequence Command Command
              | IFE (Expr) Command Command
              | While (Expr) Command
-             | Declarations [(Identifier, Command)]
+             | CommandBlock [(Label, Command)]
              | ResultIs (Expr)
 
-data Expr = ELabel Identifier
+data Expr = ELabel Label
           | ETrue
           | EFalse
           | Cond Expr Expr Expr
@@ -130,4 +132,13 @@ data Expr = ELabel Identifier
 \end{code}
 
 \end{verbatim}
+
+There is function, known as an environment which gives the mapping from identifiers to their denotations.
+
+\begin{align*}
+\rho \in Env = [Id \rightarrow D].
+\end{align*}
+
+\subsection{Continuations}
+
 \end{document}
