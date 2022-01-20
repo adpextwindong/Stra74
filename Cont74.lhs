@@ -10,6 +10,12 @@
 \begin{document}
 \maketitle
 
+\begin{verbatim}
+\begin{code}
+import Data.Function (fix)
+import Debug.Trace (trace)
+\end{code}
+\end{verbatim}
 
 \href{https://www.cs.tufts.edu/comp/150FP/archive/christopher-strachey/continuations.pdf}{Continuations: A Mathematical Semantics for Handling Full Jumps}
 
@@ -293,19 +299,41 @@ eval (Cond e p q) env k store = condk store
                                     EFalse -> eval q env k s'
                                     _ -> error "Type Error: Cond expects tt or ff")
 
-
-
 interpret :: Command -> Env -> Cont -> Cont
-interpret (While e c) env k = fix (\theta' )
+interpret (While e c) env k = fix undefined
 
 type KM = Expr -> Store -> IO Store
 evalM :: Expr -> Env -> KM -> Store -> IO Store
 evalM (ETrue) env k store = do
       print "evalM True"
       k ETrue store
+evalM (EFalse) env k store = do
+    print "evalM False"
+    k EFalse store
+
+evalM e env k store | trace (show e) False = undefined
 
 interpretM :: Command -> Env -> (Store -> IO Store) -> (Store -> IO Store)
-interpret (While e c) env k = undefined
+interpretM (While e gamma) env k s = evalM e env whileCont s
+  where whileCont e' s' = case e' of
+                            ETrue -> interpretM gamma env (\s'' -> whileCont e' s'') s'
+                            EFalse -> k s'
+                            _ -> error "Type Error: While expects tt/ff expr"
+
+interpretM (Dummy i) env k s = do
+    print ("interpetM Dummy" <> show i)
+    k s
+
+interpretM gamma env k s | trace (show gamma) False = undefined
+
+idM :: Store -> IO Store
+idM = return
+
+tW = interpretM (While EFalse (Dummy 1)) Env idM Store
+tWW = interpretM (While ETrue (Dummy 1)) Env idM Store
+
+--TODO add assignment and a compare expression
+--TODO test While
 
 \end{code}
 \end{verbatim}
