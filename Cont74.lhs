@@ -18,6 +18,16 @@ References in particular:
 \href{https://www.cs.ox.ac.uk/files/3228/PRG06.pdf}{Scott, D. and Strachey, C. Toward a mathematical semantics for computer languages. In Proc. of the Symposium
 on Computers and Automata, Polytechnic Institute of Brooklyn, 1971. Also as Technical Monograph PRG-6, Oxford University Computing Laboratory, Programming Research Group}
 
+Further reading:
+
+\href{https://www.cs.princeton.edu/~appel/papers/cpcps.pdf}{Continuation-Passing, Closure-Passing Style by Andrew W. Appel and Trevor Jim 1988}
+
+\href{http://www.jimpryor.net/teaching/nasslli/wadler-essence.pdf}{The essence of functional programming by Philip Wadler POPL 92}
+
+\href{https://kseo.github.io/posts/2017-01-09-continuation-passing-style-interpreter.html}{Kwang's Haskell Blog - Continuation Passing Style Interpreter}
+
+\href{https://stackoverflow.com/questions/25365900/trying-to-apply-cps-to-an-interpreter}{Applying CPS to an interpreter StackOverflow}
+
 \section{Conventions}
 
 $C$\newline
@@ -85,7 +95,7 @@ In this we have an expression of the form \textbf{valof}$\gamma$ and a command o
 NOTE: $\gamma$ is a Command and $\epsilon$ is an expression.
 
 \begin{verbatim}
-data Expr = ... 
+data Expr = ...
           | Valof Command
 
 data Command = ...
@@ -286,7 +296,7 @@ eval (Cond e p q) env k store = condk store
 
 
 interpret :: Command -> Env -> Cont -> Cont
-interpret = undefined
+interpret (While e c) env k = fix (\theta' )
 
 type KM = Expr -> Store -> IO Store
 evalM :: Expr -> Env -> KM -> Store -> IO Store
@@ -294,6 +304,8 @@ evalM (ETrue) env k store = do
       print "evalM True"
       k ETrue store
 
+interpretM :: Command -> Env -> (Store -> IO Store) -> (Store -> IO Store)
+interpret (While e c) env k = undefined
 
 \end{code}
 \end{verbatim}
