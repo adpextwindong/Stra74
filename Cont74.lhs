@@ -126,19 +126,26 @@ type Identifier = String
 type Label = Identifier
 
 data Command = Prim
-             | Dummy
+             | Dummy Int
              | Sequence Command Command
              | IFE Expr Command Command
              | While Expr Command
              | CommandBlock [(Label, Command)]
              | ResultIs Expr
+             deriving Show
 
 data Expr = ELabel Label
           | ETrue
           | EFalse
           | Cond Expr Expr Expr
           | ValOf Command
+            deriving Show
 
+tx = Sequence (Dummy 0)
+            $ Sequence (Dummy 1)
+                  $ Sequence (Dummy 2) $ Dummy 3
+
+ty = CommandBlock $ fmap (\i -> (show i, Dummy i)) [0..5]
 \end{code}
 
 \end{verbatim}
@@ -209,7 +216,7 @@ P\llbracket\gamma_0;\gamma_1\rrbracket\rho\theta\sigma = P\llbracket\gamma_0\rrb
 
 Now considering labels and jumps. The value of a label with be the state transformation from the labelled point to the end of the program (the rest of the program).
 
-$P\llbracket\textbf{goto}\epsilon\rrbracket\rho\theta$ will simply ignore the original continuation $\theta$ and use the value of $\epislon$ (the label) as the continuation.
+$P\llbracket\textbf{goto}\epsilon\rrbracket\rho\theta$ will simply ignore the original continuation $\theta$ and use the value of $\epsilon$ (the label) as the continuation.
 
 \subsection{Expressions}
 
@@ -219,8 +226,9 @@ This leads us to a new type of continuations, \emph{expression continuation}.
 
 As arguments it takes the expression result, a state, and produces a final state.
 
-$K = [E \rightarrow [S \rightarrow S]]
-$K = [E \rightarrow CONT]
+$K = [E \rightarrow [S \rightarrow S]]$
+
+$K = [E \rightarrow CONT]$
 
 \begin{verbatim}
 \begin{code}
@@ -232,6 +240,62 @@ NOTE: $E$ is the domain of expression results. In this example it is the same as
 
 We shall use $\delta$ for the typical element of both $E$ and $D$ and $\kappa \in K$ for an individual expression continuation.
 
-This leads to 
+This leads to a semantic function for expressions denoted by $\mathcal{E}$
+
+\begin{align*}
+\mathcal{E} : [Exp \rightarrow [Env \rightarrow [K \rightarrow [S \rightarrow S]]]]
+\end{align*}
+
+For example
+
+\begin{align*}
+\mathcal{E}\llbracket tt \rrbracket\rho\kappa\sigma = \kappa(tt)\sigma\newline
+\mathcal{E}\llbracket ff \rrbracket\rho\kappa\sigma = \kappa(ff)\sigma\newline
+\end{align*}
+
+For an identifier its almost equally simple
+
+\begin{align*}
+\mathcal{E}\llbracket\xi\rrbracket\rho\kappa\sigma = \kappa(\rho\llbracket\xi\rrbracket)\sigma
+\end{align*}
+
+\begin{verbatim}
+\begin{code}
+data Env = Env
+
+--Looks up an identifier in an environment
+find :: Env -> Identifier -> Expr
+find = undefined
+
+insert :: Identifier -> Expr -> Env -> Env
+insert = undefined
+
+type K = Expr -> Cont
+
+eval :: Expr -> Env -> K -> Store -> Store
+eval (ETrue) env k store = k ETrue store
+eval (EFalse) env k store = k EFalse store
+eval (ELabel identifier) env k store = k (find env identifier) store
+eval (Cond e p q) env k store = condk store
+  where
+    condk = eval e env (\e' s' -> case e' of
+                                    ETrue -> eval p env k s'
+                                    EFalse -> eval q env k s'
+                                    _ -> error "Type Error: Cond expects tt or ff")
+
+
+
+interpret :: Command -> Env -> Cont -> Cont
+interpret = undefined
+
+type KM = Expr -> Store -> IO Store
+evalM :: Expr -> Env -> KM -> Store -> IO Store
+evalM (ETrue) env k store = do
+      print "evalM True"
+      k ETrue store
+
+
+\end{code}
+\end{verbatim}
 
 \end{document}
