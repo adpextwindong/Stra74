@@ -14,6 +14,7 @@
 \begin{code}
 import Data.Function (fix)
 import Debug.Trace (trace)
+import qualified Data.Map.Strict as M
 \end{code}
 \end{verbatim}
 
@@ -138,10 +139,11 @@ $\phi \in Fn$ Some Primitive Commands\newline
 
 \begin{verbatim}
 \begin{code}
-data Store = Store
 
 type Identifier = String
 type Label = Identifier
+
+type Store = M.Map Identifier Expr
 
 data Command = Prim
              | Dummy Int
@@ -150,6 +152,9 @@ data Command = Prim
              | While Expr Command
              | CommandBlock [(Label, Command)]
              | ResultIs Expr
+             | VarDecl Identifier Expr --TODO variable declaration
+             | Incr Identifier         --TODO increment
+             | Print Identifier        --TODO dummy print statement for identifiers
              deriving Show
 
 data Expr = ELabel Label
@@ -157,6 +162,9 @@ data Expr = ELabel Label
           | EFalse
           | Cond Expr Expr Expr
           | ValOf Command
+          | ELTE Expr Expr               --TODO lte comparision
+          | Var Identifier              --TODO var lookup
+          | Const Int                   --TODO constants
             deriving Show
 
 tx = Sequence (Dummy 0)
@@ -277,23 +285,32 @@ For an identifier its almost equally simple
 \mathcal{E}\llbracket\xi\rrbracket\rho\kappa\sigma = \kappa(\rho\llbracket\xi\rrbracket)\sigma
 \end{align*}
 
+The fact that the same store $\sigma$ occurs on both sides of these equations indicates that is has not been altered by the evalution of the exprression -- in other words that true, false and identifiers $\xi$ can be evaluated without side-effects. This is not true of expressions in general (and of \textbf{valof} expressions in particular). If the evaluation of $\epsilon$ in the environment $\rho$ and with a machine state $\sigma$ terminates normaly producing a result $\delta$ and an altered state $\sigma'$, we should get
+
+\begin{align*}
+\mathcal{E}\llbracket\epsilon\rrbracket\rho\kappa\sigma = \kappa(\delta)(\sigma')
+\end{align*}
+
 \begin{verbatim}
 \begin{code}
 data Env = Env
 
---Looks up an identifier in an environment
-find :: Env -> Identifier -> Expr
-find = undefined
+--Looks up an identifier
+find :: Env -> Store -> Identifier -> Expr
+find _ s i = s M.! i
+--For now we're checking the store and ignoring env.
+--TODO check how jlox handles the enviornment for closures
 
-insert :: Identifier -> Expr -> Env -> Env
-insert = undefined
+insert :: Identifier -> Expr -> Store -> Store
+insert i e s = M.insert i e s
 
+--Expression Continuation
 type K = Expr -> Cont
 
 eval :: Expr -> Env -> K -> Store -> Store
 eval (ETrue) env k store = k ETrue store
 eval (EFalse) env k store = k EFalse store
-eval (ELabel identifier) env k store = k (find env identifier) store
+eval (ELabel identifier) env k store = k (find env store identifier) store
 eval (Cond e p q) env k store = condk store
   where
     condk = eval e env (\e' s' -> case e' of
@@ -304,8 +321,10 @@ eval (Cond e p q) env k store = condk store
 interpret :: Command -> Env -> Cont -> Cont
 interpret (While e c) env k = fix undefined
 
-type KM = Expr -> Store -> IO Store
-evalM :: Expr -> Env -> KM -> Store -> IO Store
+--Monadic Expression Continuation (for printing in this example)
+--Lox can probably lose MonadState but hold onto MonadFail/MonadIO
+type KM m = Expr -> Store -> m Store
+evalM :: Expr -> Env -> KM IO -> Store -> IO Store
 evalM (ETrue) env k store = do
       print "evalM True"
       k ETrue store
@@ -331,11 +350,17 @@ interpretM gamma env k s | trace (show gamma) False = undefined
 idM :: Store -> IO Store
 idM = return
 
-tW = interpretM (While EFalse (Dummy 1)) Env idM Store
-tWW = interpretM (While ETrue (Dummy 1)) Env idM Store
+tW = interpretM (While EFalse (Dummy 1)) Env idM emptyStore
+tWW = interpretM (While ETrue (Dummy 1)) Env idM emptyStore
+tWWW = interpretM (Sequence (VarDecl "x" (Const 0))
+                            (While (ELTE (Var "x") (Const 5))
+                                   (Sequence (Print "x")
+                                             (Incr "x")))) Env idM emptyStore
 
---TODO add assignment and a compare expression
+emptyStore = M.empty
+--TODO add increment and a compare expression
 --TODO test While
+--TODO figure out the difference between environment and store for Lox
 
 \end{code}
 \end{verbatim}
