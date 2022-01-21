@@ -34,6 +34,8 @@ Further reading:
 
 \href{https://stackoverflow.com/questions/25365900/trying-to-apply-cps-to-an-interpreter}{Applying CPS to an interpreter StackOverflow}
 
+\href{https://www.cis.upenn.edu/~bcpierce/courses/670Fall04/GreatWorksInPL.shtml}{Great Works in Programming Languages - Collected by Benjamin C. Pierce}
+
 \section{Conventions}
 
 $C$\newline
