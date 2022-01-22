@@ -162,9 +162,9 @@ data Expr = ELabel Label
           | EFalse
           | Cond Expr Expr Expr
           | ValOf Command
-          | ELTE Expr Expr               --TODO lte comparision
+          | ELTE Expr Expr
           | Var Identifier              --TODO var lookup
-          | Const Int                   --TODO constants
+          | Const Int
             deriving Show
 
 tx = Sequence (Dummy 0)
@@ -307,6 +307,9 @@ insert i e s = M.insert i e s
 --Expression Continuation
 type K = Expr -> Cont
 
+kTrace :: K
+kTrace = \e -> trace (show e) id
+
 eval :: Expr -> Env -> K -> Store -> Store
 eval (ETrue) env k store = k ETrue store
 eval (EFalse) env k store = k EFalse store
@@ -317,6 +320,25 @@ eval (Cond e p q) env k store = condk store
                                     ETrue -> eval p env k s'
                                     EFalse -> eval q env k s'
                                     _ -> error "Type Error: Cond expects tt or ff")
+
+eval (ELTE e1 e2) env k store = contLTE
+  where
+    typeError = error "Type Error: LTE expects Const Int"
+    contLTE = eval e1 env (contE1) store
+    contE1 = (\e1' s' -> case e1' of
+                          (Const e1i) -> eval e2 env (contE2 e1i) s'
+                          _ -> typeError)
+
+    contE2 e1i = (\e2' s''-> case e2' of
+                          (Const e2i) -> k (answer e1i e2i) s''
+                          _ -> typeError)
+
+    answer x y = case x <= y of
+                   True -> ETrue
+                   False -> EFalse
+
+eval (Var i) env k store = undefined              --TODO var lookup
+eval c@(Const i) env k store = k c store
 
 interpret :: Command -> Env -> Cont -> Cont
 interpret (While e c) env k = fix undefined
@@ -345,6 +367,10 @@ interpretM (Dummy i) env k s = do
     print ("interpetM Dummy" <> show i)
     k s
 
+interpretM (VarDecl i e) env k s = undefined --TODO variable declaration
+interpretM (Incr i) env k s = undefined --TODO increment
+interpretM (Print i) env k s = undefined --TODO dummy print statement for identifiers
+
 interpretM gamma env k s | trace (show gamma) False = undefined
 
 idM :: Store -> IO Store
@@ -361,6 +387,9 @@ emptyStore = M.empty
 --TODO add increment and a compare expression
 --TODO test While
 --TODO figure out the difference between environment and store for Lox
+
+
+--eval (ELTE (Const 4) (Const 3)) Env kTrace emptyStore
 
 \end{code}
 \end{verbatim}
