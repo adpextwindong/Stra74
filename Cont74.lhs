@@ -152,9 +152,9 @@ data Command = Prim
              | While Expr Command
              | CommandBlock [(Label, Command)]
              | ResultIs Expr
-             | VarDecl Identifier Expr --TODO variable declaration
-             | Incr Identifier         --TODO increment
-             | Print Identifier        --TODO dummy print statement for identifiers
+             | VarDecl Identifier Expr
+             | Incr Identifier
+             | Print Identifier
              deriving Show
 
 data Expr = ELabel Label
@@ -163,7 +163,7 @@ data Expr = ELabel Label
           | Cond Expr Expr Expr
           | ValOf Command
           | ELTE Expr Expr
-          | Var Identifier              --TODO var lookup
+          | Var Identifier
           | Const Int
             deriving Show
 
@@ -310,23 +310,27 @@ type K = Expr -> Cont
 kTrace :: K
 kTrace = \e -> trace (show e) id
 
-eval :: Expr -> Env -> K -> Store -> Store
-eval (ETrue) env k store = k ETrue store
-eval (EFalse) env k store = k EFalse store
-eval (ELabel identifier) env k store = k (find env store identifier) store
-eval (Cond e p q) env k store = condk store
+--Monadic Expression Continuation (for printing in this example)
+--Lox can probably lose MonadState but hold onto MonadFail/MonadIO
+type KM m = Expr -> Store -> m Store
+
+evalM :: Expr -> Env -> KM IO -> Store -> IO Store
+evalM (ETrue) env k store = k ETrue store
+evalM (EFalse) env k store = k EFalse store
+evalM (ELabel identifier) env k store = k (find env store identifier) store
+evalM (Cond e p q) env k store = condk store
   where
-    condk = eval e env (\e' s' -> case e' of
-                                    ETrue -> eval p env k s'
-                                    EFalse -> eval q env k s'
+    condk = evalM e env (\e' s' -> case e' of
+                                    ETrue -> evalM p env k s'
+                                    EFalse -> evalM q env k s'
                                     _ -> error "Type Error: Cond expects tt or ff")
 
-eval (ELTE e1 e2) env k store = contLTE
+evalM (ELTE e1 e2) env k store = contLTE
   where
     typeError = error "Type Error: LTE expects Const Int"
-    contLTE = eval e1 env (contE1) store
+    contLTE = evalM e1 env (contE1) store
     contE1 = (\e1' s' -> case e1' of
-                          (Const e1i) -> eval e2 env (contE2 e1i) s'
+                          (Const e1i) -> evalM e2 env (contE2 e1i) s'
                           _ -> typeError)
 
     contE2 e1i = (\e2' s''-> case e2' of
@@ -337,29 +341,15 @@ eval (ELTE e1 e2) env k store = contLTE
                    True -> ETrue
                    False -> EFalse
 
-eval (Var i) env k store = undefined              --TODO var lookup
-eval c@(Const i) env k store = k c store
-
-interpret :: Command -> Env -> Cont -> Cont
-interpret (While e c) env k = fix undefined
-
---Monadic Expression Continuation (for printing in this example)
---Lox can probably lose MonadState but hold onto MonadFail/MonadIO
-type KM m = Expr -> Store -> m Store
-evalM :: Expr -> Env -> KM IO -> Store -> IO Store
-evalM (ETrue) env k store = do
-      print "evalM True"
-      k ETrue store
-evalM (EFalse) env k store = do
-    print "evalM False"
-    k EFalse store
+evalM (Var i) env k store = k (store M.! i) store
+evalM c@(Const i) env k store = k c store
 
 evalM e env k store | trace (show e) False = undefined
 
 interpretM :: Command -> Env -> (Store -> IO Store) -> (Store -> IO Store)
-interpretM (While e gamma) env k s = evalM e env whileCont s
+interpretM w@(While e gamma) env k s = evalM e env whileCont s
   where whileCont e' s' = case e' of
-                            ETrue -> interpretM gamma env (\s'' -> whileCont e' s'') s'
+                            ETrue -> interpretM gamma env (\s'' -> interpretM w env k s'') s'
                             EFalse -> k s'
                             _ -> error "Type Error: While expects tt/ff expr"
 
@@ -367,10 +357,17 @@ interpretM (Dummy i) env k s = do
     print ("interpetM Dummy" <> show i)
     k s
 
-interpretM (VarDecl i e) env k s = undefined --TODO variable declaration
-interpretM (Incr i) env k s = undefined --TODO increment
-interpretM (Print i) env k s = undefined --TODO dummy print statement for identifiers
+interpretM (VarDecl i e) env k s = k (M.insert i e s)
+interpretM (Incr i) env k s = case M.lookup i s of
+                                Nothing -> error $ "Missing Var Error: Identifier "<> i <> " undeclared"
+                                Just e -> case e of
+                                            (Const v) -> k (M.insert i (Const (v+1)) s)
+                                            _ -> error $ "Type Error: Incr expects Const"
+interpretM (Print i) env k s = do
+  print ("interpretM Print" <> show (s M.! i))
+  k s
 
+interpretM (Sequence g g') env k s = interpretM g env (\s' -> interpretM g' env k s') s
 interpretM gamma env k s | trace (show gamma) False = undefined
 
 idM :: Store -> IO Store
@@ -378,19 +375,21 @@ idM = return
 
 tW = interpretM (While EFalse (Dummy 1)) Env idM emptyStore
 tWW = interpretM (While ETrue (Dummy 1)) Env idM emptyStore
-tWWW = interpretM (Sequence (VarDecl "x" (Const 0))
+tWWW = interpretM (Sequence (VarDecl "x" (Const 1))
                             (While (ELTE (Var "x") (Const 5))
                                    (Sequence (Print "x")
                                              (Incr "x")))) Env idM emptyStore
 
 emptyStore = M.empty
---TODO add increment and a compare expression
 --TODO test While
 --TODO figure out the difference between environment and store for Lox
 
 
 --eval (ELTE (Const 4) (Const 3)) Env kTrace emptyStore
 
+tVD = interpretM (Sequence (VarDecl "x" (Const 0))
+                           (Sequence (Incr "x") (Print "x")))
+                Env idM emptyStore
 \end{code}
 \end{verbatim}
 
