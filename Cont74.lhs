@@ -394,19 +394,26 @@ tVD = interpretM (Sequence (VarDecl "x" (Const 0))
                 Env idM emptyStore
 
 
---Traverse AST for labels and their continuations
+--Traverse AST for labels and their continuations.
+--Labels must be distinct otherwise an error is thrown when its evaluation is forced
 labelPass :: Command -> LM.Map Label (Store -> IO Store)
 labelPass (Sequence g gs)     = LM.union (labelPass g) (labelPass gs)
 labelPass (IFE _ l r)         = LM.union (labelPass l) (labelPass r)
 labelPass (While _ g)         = labelPass g
-labelPass c@(CommandBlock ls) = undefined --TODO
-             -- CommandBlock [(Label, Command)]
+labelPass c@(CommandBlock ls) = LM.unionsWith distinctLabelError (topLabels : nestedLabels)
+  where
+    conts = fmap (second (\c -> interpretM c Env return)) ls
+    topLabels = foldl (\m (l,k) -> insertDistinct l k m) LM.empty conts --TODO double check which fold is appropriate for laziness
+    nestedLabels = fmap (labelPass . snd) ls
 
-foo = [("10", Prim), ("20", Prim)]
+insertDistinct :: (Ord k) => k -> v -> LM.Map k v -> LM.Map k v
 insertDistinct = LM.insertWith (\_ _ -> error "Labels must be distinct")
-bar = insertDistinct "10" Prim LM.empty
-qux = \c -> interpretM c Env return
 
+--We could use set intersection to find nondistinct labels alternatively as a check
+
+distinctLabelError = (\_ _ -> error "Labels must be distinct")
+
+--TODO stash a label map into Env and look it up on goto
 
 \end{code}
 \end{verbatim}
