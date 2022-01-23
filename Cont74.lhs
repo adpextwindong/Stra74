@@ -15,6 +15,8 @@
 import Data.Function (fix)
 import Debug.Trace (trace)
 import qualified Data.Map.Strict as M
+import qualified Data.Map.Lazy as LM
+import Data.Bifunctor
 \end{code}
 \end{verbatim}
 
@@ -390,6 +392,22 @@ emptyStore = M.empty
 tVD = interpretM (Sequence (VarDecl "x" (Const 0))
                            (Sequence (Incr "x") (Print "x")))
                 Env idM emptyStore
+
+
+--Traverse AST for labels and their continuations
+labelPass :: Command -> LM.Map Label (Store -> IO Store)
+labelPass (Sequence g gs)     = LM.union (labelPass g) (labelPass gs)
+labelPass (IFE _ l r)         = LM.union (labelPass l) (labelPass r)
+labelPass (While _ g)         = labelPass g
+labelPass c@(CommandBlock ls) = undefined --TODO
+             -- CommandBlock [(Label, Command)]
+
+foo = [("10", Prim), ("20", Prim)]
+insertDistinct = LM.insertWith (\_ _ -> error "Labels must be distinct")
+bar = insertDistinct "10" Prim LM.empty
+qux = \c -> interpretM c Env return
+
+
 \end{code}
 \end{verbatim}
 
