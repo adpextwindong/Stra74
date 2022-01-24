@@ -146,7 +146,6 @@ labelPass (IFE _ l r) env k         = LM.union (labelPass l env k ) (labelPass r
 labelPass (While _ g) env k         = labelPass g env k
 labelPass c@(CommandBlock ls) env k = LM.unionsWith distinctLabelError (topLabels : nestedLabels)
   where
-    conts = fmap (second (\c -> interpretM c blankEnv return)) ls --TODO fix
     topLabels = commandBlockConts ls env k
     nestedLabels = fmap ((\g -> labelPass g env k). snd) ls
 
