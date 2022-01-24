@@ -9,13 +9,12 @@ type Label = Identifier
 
 type Store = M.Map Identifier Expr
 
-data Command = Prim
-             | Dummy Int
+data Command = Dummy Int
              | Sequence Command Command
              | IFE Expr Command Command
              | While Expr Command
              | CommandBlock [(Label, Command)]
-             | ResultIs Expr
+             | ResultIs Expr --TODO
              | VarDecl Identifier Expr
              | Incr Identifier
              | Print Identifier
@@ -26,20 +25,13 @@ data Expr = ELabel Label
           | ETrue
           | EFalse
           | Cond Expr Expr Expr
-          | ValOf Command
+          | ValOf Command --TODO
           | ELTE Expr Expr
           | Var Identifier
           | Const Int
             deriving Show
 
-tx = Sequence (Dummy 0)
-            $ Sequence (Dummy 1)
-                  $ Sequence (Dummy 2) $ Dummy 3
-
-ty = CommandBlock $ fmap (\i -> (show i, Dummy i)) [0..5]
-
 type Cont = Store -> Store
-type ECont = Expr -> Cont
 
 data Env = Env {
              gotoTable :: LM.Map Label (Store -> IO Store)
@@ -48,8 +40,6 @@ data Env = Env {
 --Looks up an identifier
 find :: Env -> Store -> Identifier -> Expr
 find _ s i = s M.! i
---For now we're checking the store and ignoring env.
---TODO check how jlox handles the enviornment for closures
 
 insert :: Identifier -> Expr -> Store -> Store
 insert i e s = M.insert i e s
@@ -138,9 +128,6 @@ tWWW = interpretM (Sequence (VarDecl "x" (Const 1))
                                              (Incr "x")))) blankEnv idM emptyStore
 
 emptyStore = M.empty
---TODO test While
---TODO figure out the difference between environment and store for Lox
-
 
 --eval (ELTE (Const 4) (Const 3)) Env kTrace emptyStore
 
@@ -159,7 +146,7 @@ labelPass (IFE _ l r) env k         = LM.union (labelPass l env k ) (labelPass r
 labelPass (While _ g) env k         = labelPass g env k
 labelPass c@(CommandBlock ls) env k = LM.unionsWith distinctLabelError (topLabels : nestedLabels)
   where
-    conts = fmap (second (\c -> interpretM c blankEnv return)) ls
+    conts = fmap (second (\c -> interpretM c blankEnv return)) ls --TODO fix
     topLabels = commandBlockConts ls env k
     nestedLabels = fmap ((\g -> labelPass g env k). snd) ls
 
@@ -179,7 +166,6 @@ insertDistinct = LM.insertWith (\_ _ -> error "Labels must be distinct")
 
 distinctLabelError = (\_ _ -> error "Labels must be distinct")
 
---TODO stash a label map into Env and look it up on goto
 blankEnv = Env LM.empty
 
 prog = Sequence (VarDecl "x" (Const 0))
