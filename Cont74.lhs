@@ -445,12 +445,14 @@ prog = Sequence (VarDecl "x" (Const 0))
                       (Print "y"))
                  (Print "x"))))
 
-testProg = interpretM prog (fixProgEnv prog) idM emptyStore
+testProg = interpretM prog (fixProgEnv' prog) idM emptyStore
 
 --This is to get labelPass to reference itself, the newly created env.
 fixProgEnv prog = env
   where
     env = Env (labelPass prog env kId)
+
+fixProgEnv' prog = fix (\e -> Env (labelPass prog e kId))
 
 kId = return :: Store -> IO Store
 \end{code}
