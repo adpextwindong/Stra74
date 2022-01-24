@@ -157,6 +157,7 @@ data Command = Prim
              | VarDecl Identifier Expr
              | Incr Identifier
              | Print Identifier
+             | Goto Label
              deriving Show
 
 data Expr = ELabel Label
@@ -295,7 +296,9 @@ The fact that the same store $\sigma$ occurs on both sides of these equations in
 
 \begin{verbatim}
 \begin{code}
-data Env = Env
+data Env = Env {
+             gotoTable :: LM.Map Label (Store -> IO Store)
+           }
 
 --Looks up an identifier
 find :: Env -> Store -> Identifier -> Expr
@@ -349,6 +352,7 @@ evalM c@(Const i) env k store = k c store
 evalM e env k store | trace (show e) False = undefined
 
 interpretM :: Command -> Env -> (Store -> IO Store) -> (Store -> IO Store)
+--interpretM gamma env k s | trace ("interpretting " <> show gamma) False = undefined
 interpretM w@(While e gamma) env k s = evalM e env whileCont s
   where whileCont e' s' = case e' of
                             ETrue -> interpretM gamma env (\s'' -> interpretM w env k s'') s'
@@ -370,17 +374,23 @@ interpretM (Print i) env k s = do
   k s
 
 interpretM (Sequence g g') env k s = interpretM g env (\s' -> interpretM g' env k s') s
-interpretM gamma env k s | trace (show gamma) False = undefined
+interpretM (CommandBlock []) env k s = k s
+interpretM (CommandBlock ((_,g):gs)) env k s = interpretM g env (\s' -> interpretM (CommandBlock gs) env k s') s
+interpretM (IFE e gtrue gfalse) env k s =  evalM e env (\e' s' -> case e' of
+                                                                 ETrue -> interpretM gtrue env k s'
+                                                                 EFalse -> interpretM gfalse env k s'
+                                                                 _ -> error "Type Error: IFE Expets tt/ff") s
+interpretM (Goto label) env@(Env gotoTable) k s = (gotoTable LM.! label) s
 
 idM :: Store -> IO Store
 idM = return
 
-tW = interpretM (While EFalse (Dummy 1)) Env idM emptyStore
-tWW = interpretM (While ETrue (Dummy 1)) Env idM emptyStore
+tW = interpretM (While EFalse (Dummy 1)) blankEnv idM emptyStore
+tWW = interpretM (While ETrue (Dummy 1)) blankEnv idM emptyStore
 tWWW = interpretM (Sequence (VarDecl "x" (Const 1))
                             (While (ELTE (Var "x") (Const 5))
                                    (Sequence (Print "x")
-                                             (Incr "x")))) Env idM emptyStore
+                                             (Incr "x")))) blankEnv idM emptyStore
 
 emptyStore = M.empty
 --TODO test While
@@ -391,20 +401,31 @@ emptyStore = M.empty
 
 tVD = interpretM (Sequence (VarDecl "x" (Const 0))
                            (Sequence (Incr "x") (Print "x")))
-                Env idM emptyStore
+                blankEnv idM emptyStore
 
 
 --Traverse AST for labels and their continuations.
 --Labels must be distinct otherwise an error is thrown when its evaluation is forced
-labelPass :: Command -> LM.Map Label (Store -> IO Store)
-labelPass (Sequence g gs)     = LM.union (labelPass g) (labelPass gs)
-labelPass (IFE _ l r)         = LM.union (labelPass l) (labelPass r)
-labelPass (While _ g)         = labelPass g
-labelPass c@(CommandBlock ls) = LM.unionsWith distinctLabelError (topLabels : nestedLabels)
+labelPass :: Command -> Env -> (Store -> IO Store) -> LM.Map Label (Store -> IO Store)
+labelPass (Sequence g gs) env k     = LM.union (labelPass g env gcont) (labelPass gs env k)
+  where gcont = interpretM gs env k
+
+labelPass (IFE _ l r) env k         = LM.union (labelPass l env k ) (labelPass r env k)
+labelPass (While _ g) env k         = labelPass g env k
+labelPass c@(CommandBlock ls) env k = LM.unionsWith distinctLabelError (topLabels : nestedLabels)
   where
-    conts = fmap (second (\c -> interpretM c Env return)) ls
-    topLabels = foldl (\m (l,k) -> insertDistinct l k m) LM.empty conts --TODO double check which fold is appropriate for laziness
-    nestedLabels = fmap (labelPass . snd) ls
+    conts = fmap (second (\c -> interpretM c blankEnv return)) ls
+    topLabels = commandBlockConts ls env k
+    nestedLabels = fmap ((\g -> labelPass g env k). snd) ls
+
+labelPass _ _ _ = LM.empty
+labelPass gamma env k | trace (show gamma) False = undefined
+
+commandBlockConts :: [(Label, Command)] -> Env -> (Store -> IO Store) -> LM.Map Label (Store -> IO Store)
+commandBlockConts [] env k = LM.empty
+commandBlockConts ((l,g):gs) env k = LM.union (LM.singleton l gke) (commandBlockConts gs env k)
+  where gke = interpretM g env (interpretM (CommandBlock gs) env k)
+
 
 insertDistinct :: (Ord k) => k -> v -> LM.Map k v -> LM.Map k v
 insertDistinct = LM.insertWith (\_ _ -> error "Labels must be distinct")
@@ -414,7 +435,24 @@ insertDistinct = LM.insertWith (\_ _ -> error "Labels must be distinct")
 distinctLabelError = (\_ _ -> error "Labels must be distinct")
 
 --TODO stash a label map into Env and look it up on goto
+blankEnv = Env LM.empty
 
+prog = Sequence (VarDecl "x" (Const 0))
+       (Sequence (VarDecl "y" (Const 666))
+       (Sequence (CommandBlock [("10" ,Incr "x"), ("20", Print "x")])
+       (Sequence (IFE (ELTE (Var "x") (Const 5))
+                      (Goto "10")
+                      (Print "y"))
+                 (Print "x"))))
+
+testProg = interpretM prog (fixProgEnv prog) idM emptyStore
+
+--This is to get labelPass to reference itself, the newly created env.
+fixProgEnv prog = env
+  where
+    env = Env (labelPass prog env kId)
+
+kId = return :: Store -> IO Store
 \end{code}
 \end{verbatim}
 
