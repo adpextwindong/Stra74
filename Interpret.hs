@@ -35,6 +35,7 @@ type Cont = Store -> Store
 
 data Env = Env {
              gotoTable :: LM.Map Label (Store -> IO Store)
+            ,res :: Maybe (Store -> IO Store)
            }
 
 --Looks up an identifier
@@ -115,7 +116,7 @@ interpretM (IFE e gtrue gfalse) env k s =  evalM e env (\e' s' -> case e' of
                                                                  ETrue -> interpretM gtrue env k s'
                                                                  EFalse -> interpretM gfalse env k s'
                                                                  _ -> error "Type Error: IFE Expets tt/ff") s
-interpretM (Goto label) env@(Env gotoTable) k s = (gotoTable LM.! label) s
+interpretM (Goto label) env@(Env gotoTable _) k s = (gotoTable LM.! label) s
 
 idM :: Store -> IO Store
 idM = return
@@ -165,7 +166,7 @@ insertDistinct = LM.insertWith (\_ _ -> error "Labels must be distinct")
 
 distinctLabelError = (\_ _ -> error "Labels must be distinct")
 
-blankEnv = Env LM.empty
+blankEnv = Env LM.empty Nothing
 
 prog = Sequence (VarDecl "x" (Const 0))
        (Sequence (VarDecl "y" (Const 666))
@@ -178,10 +179,9 @@ prog = Sequence (VarDecl "x" (Const 0))
 testProg = interpretM prog (fixProgEnv' prog) idM emptyStore
 
 --This is to get labelPass to reference itself, the newly created env.
-fixProgEnv prog = env
-  where
-    env = Env (labelPass prog env kId)
-
-fixProgEnv' prog = fix (\e -> Env (labelPass prog e kId))
+fixProgEnv' prog = fix (\e -> Env {
+                                gotoTable = labelPass prog e kId
+                               ,res = Nothing
+                               })
 
 kId = return :: Store -> IO Store
