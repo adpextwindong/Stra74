@@ -176,7 +176,11 @@ prog = Sequence (VarDecl "x" (Const 0))
                       (Print "y"))
                  (Print "x"))))
 
-testProg = interpretM prog (fixProgEnv' prog) idM emptyStore
+whileProg = Sequence (VarDecl "x" (Const 0))
+            (While (ELTE (Var "x") (Const 5))
+                             (Sequence (Incr "x") (Print "x")))
+
+runProg prog = interpretM prog (fixProgEnv' prog) idM emptyStore
 
 --This is to get labelPass to reference itself, the newly created env.
 fixProgEnv' prog = fix (\e -> Env {
