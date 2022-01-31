@@ -7,4 +7,4 @@ for Handling Full Jumps by Strachey & Wadsworth 1974](http://web.archive.org/web
 
 - [x] While
 - [x] GOTO
-- [ ] valof/resultis
+- [x] valof/resultis
