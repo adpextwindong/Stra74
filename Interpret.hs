@@ -14,7 +14,7 @@ data Command = Dummy Int
              | IFE Expr Command Command
              | While Expr Command
              | CommandBlock [(Label, Command)]
-             | ResultIs Expr --TODO
+             | ResultIs Expr
              | VarDecl Identifier Expr
              | Incr Identifier
              | Print Identifier
@@ -25,17 +25,19 @@ data Expr = ELabel Label
           | ETrue
           | EFalse
           | Cond Expr Expr Expr
-          | ValOf Command --TODO
+          | ValOf Command
           | ELTE Expr Expr
           | Var Identifier
           | Const Int
             deriving Show
 
+-- κ
 type Cont = Store -> Store
 
+-- ρ
 data Env = Env {
              gotoTable :: LM.Map Label (Store -> IO Store)
-            ,res :: Maybe (Store -> IO Store)
+            ,res :: [KM IO]
            }
 
 --Looks up an identifier
@@ -44,6 +46,9 @@ find _ s i = s M.! i
 
 insert :: Identifier -> Expr -> Store -> Store
 insert i e s = M.insert i e s
+
+pushRes :: Env -> KM IO -> Env
+pushRes (Env gt res) k = Env gt (k : res)
 
 --Expression Continuation
 type K = Expr -> Cont
@@ -55,6 +60,7 @@ kTrace = \e -> trace (show e) id
 --Lox can probably lose MonadState but hold onto MonadFail/MonadIO
 type KM m = Expr -> Store -> m Store
 
+-- ε
 evalM :: Expr -> Env -> KM IO -> Store -> IO Store
 evalM (ETrue) env k store = k ETrue store
 evalM (EFalse) env k store = k EFalse store
@@ -65,7 +71,7 @@ evalM (Cond e p q) env k store = condk store
                                     ETrue -> evalM p env k s'
                                     EFalse -> evalM q env k s'
                                     _ -> error "Type Error: Cond expects tt or ff")
-
+evalM (ValOf g) env k store = interpretM g (pushRes env k) (\_ -> error "Fail: No ResultIs") store
 evalM (ELTE e1 e2) env k store = contLTE
   where
     typeError = error "Type Error: LTE expects Const Int"
@@ -87,6 +93,7 @@ evalM c@(Const i) env k store = k c store
 
 evalM e env k store | trace (show e) False = undefined
 
+-- Ρ
 interpretM :: Command -> Env -> (Store -> IO Store) -> (Store -> IO Store)
 --interpretM gamma env k s | trace ("interpretting " <> show gamma) False = undefined
 interpretM w@(While e gamma) env k s = evalM e env whileCont s
@@ -99,7 +106,7 @@ interpretM (Dummy i) env k s = do
     print ("interpetM Dummy" <> show i)
     k s
 
-interpretM (VarDecl i e) env k s = k (M.insert i e s)
+interpretM (VarDecl i e) env k s = evalM e env (\e' s' -> k (M.insert i e' s')) s
 interpretM (Incr i) env k s = case M.lookup i s of
                                 Nothing -> error $ "Missing Var Error: Identifier "<> i <> " undeclared"
                                 Just e -> case e of
@@ -115,12 +122,13 @@ interpretM (CommandBlock ((_,g):gs)) env k s = interpretM g env (\s' -> interpre
 interpretM (IFE e gtrue gfalse) env k s =  evalM e env (\e' s' -> case e' of
                                                                  ETrue -> interpretM gtrue env k s'
                                                                  EFalse -> interpretM gfalse env k s'
-                                                                 _ -> error "Type Error: IFE Expets tt/ff") s
+                                                                 _ -> error "Type Error: IFE Expects tt/ff") s
 interpretM (Goto label) env@(Env gotoTable _) k s = (gotoTable LM.! label) s
+interpretM (ResultIs _) (Env _ []) _ _ = error "Error: No parent ValOf continuation found"
+interpretM (ResultIs e) env@(Env gotoTable (res : rs)) _ s = evalM e (Env gotoTable rs) (\e' s' -> res e' s') s
 
 idM :: Store -> IO Store
 idM = return
-
 tW = interpretM (While EFalse (Dummy 1)) blankEnv idM emptyStore
 tWW = interpretM (While ETrue (Dummy 1)) blankEnv idM emptyStore
 tWWW = interpretM (Sequence (VarDecl "x" (Const 1))
@@ -166,7 +174,7 @@ insertDistinct = LM.insertWith (\_ _ -> error "Labels must be distinct")
 
 distinctLabelError = (\_ _ -> error "Labels must be distinct")
 
-blankEnv = Env LM.empty Nothing
+blankEnv = Env LM.empty []
 
 prog = Sequence (VarDecl "x" (Const 0))
        (Sequence (VarDecl "y" (Const 666))
@@ -180,12 +188,20 @@ whileProg = Sequence (VarDecl "x" (Const 0))
             (While (ELTE (Var "x") (Const 5))
                              (Sequence (Incr "x") (Print "x")))
 
+resultIsProg = Sequence (VarDecl "x" (Const 0))
+               (Sequence (VarDecl "y" (ValOf (Sequence (Incr "x")
+                                   (ResultIs (Const 5)))))
+               (Sequence (Print "x")
+                (Print "y")))
+
+--TODO test nested ValOfs
+
 runProg prog = interpretM prog (fixProgEnv' prog) idM emptyStore
 
 --This is to get labelPass to reference itself, the newly created env.
 fixProgEnv' prog = fix (\e -> Env {
                                 gotoTable = labelPass prog e kId
-                               ,res = Nothing
+                               ,res = []
                                })
 
 kId = return :: Store -> IO Store
