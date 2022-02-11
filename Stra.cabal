@@ -1,0 +1,30 @@
+cabal-version:      2.4
+name:               Stra
+version:            0.0.0.1
+
+synopsis: CPS Interpretter for the lang described in Stra74
+
+description: Continuation Passing Style Interpretter for the language described in "Continuations, a mathematical semantics for handling full jumps".
+
+bug-reports: https://github.com/adpextwindong/Stra74/issues
+
+license: BSD-2-Clause
+license-file: LICENSE
+author:             Takumi Crary
+maintainer:         tcrary@gmail.com
+
+copyright: 2022
+category: language
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/adpextwindong/Stra74.git
+
+library
+    exposed-modules:  Interpret
+    build-depends:    base ^>=4.13.0.0
+                     ,containers >= 0.6.5.1
+    hs-source-dirs:   src
+    default-language: Haskell2010
