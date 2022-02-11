@@ -8,3 +8,5 @@ for Handling Full Jumps by Strachey & Wadsworth 1974](http://web.archive.org/web
 - [x] While
 - [x] GOTO
 - [x] valof/resultis
+- [ ] Lexer
+- [ ] Parser
